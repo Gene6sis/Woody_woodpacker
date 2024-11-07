@@ -1,2 +1,3 @@
-nasm -f bin injected_code.asm -o injected_code.bin
-xxd -i injected_code.bin
+nasm -f bin injected_code.asm -o injected_code
+xxd -i injected_code
+rm -rf injected_code

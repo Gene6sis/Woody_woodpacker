@@ -14,7 +14,7 @@ unsigned char injected_code[] = {
   0x6c, 0x6c, 0x6f, 0x20, 0x66, 0x72, 0x6f, 0x6d, 0x20, 0x69, 0x6e, 0x6a,
   0x65, 0x63, 0x74, 0x65, 0x64, 0x20, 0x63, 0x6f, 0x64, 0x65, 0x21, 0x0a
 };
-unsigned int injected_code_bin_len = 60;
+unsigned int injected_code_len = sizeof(injected_code);
 
 
 
@@ -27,8 +27,14 @@ Elf64_Shdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
     // Locate the .text section and find the cave
     for (int i = 0; i < ehdr->e_shnum; i++) {
         if (strcmp(strtab + shdr[i].sh_name, ".text") == 0) {
-            *cave_offset = shdr[i].sh_offset + shdr[i].sh_size;
-            return &shdr[i];
+            // Check if the cave is big enough for the injected code
+            if (shdr[i].sh_size >= injected_code_len) {
+                *cave_offset = shdr[i].sh_offset + shdr[i].sh_size - injected_code_len;
+                return &shdr[i];
+            } else {
+                fprintf(stderr, "Cave in .text section is not big enough for the injected code\n");
+                return NULL;
+            }
         }
     }
     return NULL;
@@ -67,7 +73,8 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 
     // Modify the entry point in the ELF header
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
-    ehdr->e_entry = (Elf64_Addr)(cave_offset);  // New entry points to injected code
+    ehdr->e_entry = text_section->sh_addr + (cave_offset - text_section->sh_offset);
+
 
     // Write modified ELF data to a new file
     int fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
