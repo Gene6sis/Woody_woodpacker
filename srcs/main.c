@@ -40,9 +40,48 @@ t_file_type check_elf(int fd) {
     return NONE; // Not a valid ELF file
 }
 
+bool parse_header(t_file *file, t_elf_file *elf_file)
+{
+    Elf64_Ehdr *header = malloc(sizeof(Elf64_Ehdr));
+    if (!header)
+    {
+        perror("Error allocating memory");
+        return false;
+    }
+    if (lseek(file->fd, 0, SEEK_SET) == -1)
+    {
+        free(header);
+        perror("Error seeking file");
+        return false;
+    }
+    if (read(file->fd, header, sizeof(Elf64_Ehdr)) != sizeof(Elf64_Ehdr))
+    {
+        free(header);
+        perror("Error reading file");
+        return false;
+    }
+    elf_file->header = header;
+    return true;
+}
+
 bool file_information(t_file *file)
 {
-    
+    t_elf_file *elf_file = malloc(sizeof(t_elf_file));
+    if (!elf_file)
+    {
+        perror("Error allocating memory");
+        return false;
+    }
+    elf_file->header = NULL;
+	elf_file->programs = NULL;
+	elf_file->sections = NULL;
+    file->elf_file = elf_file;
+
+    if (!parse_header(file, elf_file))
+    {
+        free(elf_file);
+        return false;
+    }
     return true;
 }
 
@@ -69,9 +108,9 @@ int main(int argc, char *argv[]) {
     if (Verbose)
     {
         if (file.type == FT_32)
-            printf("ELF 32-bit file\n");
+            write(1, "ELF 32-bit file\n", 16);
         else if (file.type == FT_64)
-            printf("ELF 64-bit file\n");
+            write(1, "ELF 64-bit file\n", 16);
     }
 
     if (!file_information(&file)) {
