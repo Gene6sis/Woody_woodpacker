@@ -1,28 +1,27 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.c                                             :+:      :+:    :+:   */
+/*   utils.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2024/11/12 14:21:46 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/12 14:47:08 by nguiard          ###   ########.fr       */
+/*   Created: 2024/11/12 14:10:24 by nguiard           #+#    #+#             */
+/*   Updated: 2024/11/12 14:10:52 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "woody.h"
 
-int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <input ELF file> <output ELF file>\n", argv[0]);
-        return EXIT_FAILURE;
-    }
-
-    if (inject_and_modify_entry(argv[1], argv[2]) == 0) {
-        printf("File successfully modified and saved as '%s'\n", argv[2]);
-    } else {
-        fprintf(stderr, "Failed to modify the ELF file\n");
-    }
-
-    return EXIT_SUCCESS;
+void	print_memory(char *data, size_t len) {
+	unsigned char	a;
+	for (size_t i = 0; i < len; i++) {
+		if (i % 16 == 0) {
+			printf("\n");
+		}
+		else if (i % 8 == 0) {
+			printf(" ");
+		}
+		a = data[i];
+		printf("%02x ", a); 
+	}
 }
