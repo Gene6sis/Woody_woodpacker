@@ -15,6 +15,7 @@ SRC	=	$(addsuffix .c,		\
 			main			\
 			inject			\
 			utils			\
+			key_generation	\
 		))
 
 NAME	= woody_woodpacker

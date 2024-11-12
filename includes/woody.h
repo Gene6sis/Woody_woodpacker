@@ -20,11 +20,17 @@
 #include <sys/mman.h>
 #include <elf.h>
 #include <string.h>
+#include <stdbool.h>
+
+#define key_size 64
 
 //	Utils
 void	print_memory(char *data, size_t len);
 
 //	Inject
 int		inject_and_modify_entry(const char *input_file, const char *output_file);
+
+//	Key generation
+bool    generate_key(unsigned char *key, size_t size);
 
 #endif

@@ -18,6 +18,11 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+
+
+    // unsigned char key[key_size];
+    // generate_key(key, key_size);
+
     if (inject_and_modify_entry(argv[1], argv[2]) == 0) {
         printf("File successfully modified and saved as '%s'\n", argv[2]);
     } else {
