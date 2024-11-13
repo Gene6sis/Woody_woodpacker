@@ -6,7 +6,7 @@
 #    By: nguiard <marvin@42.fr>                     +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/10/25 15:46:23 by nguiard           #+#    #+#              #
-#    Updated: 2024/11/12 14:46:03 by nguiard          ###   ########.fr        #
+#    Updated: 2024/11/13 10:31:00 by nguiard          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -15,6 +15,7 @@ SRC	=	$(addsuffix .c,		\
 			main			\
 			inject			\
 			utils			\
+			key_generation	\
 		))
 
 NAME	= woody_woodpacker
@@ -30,7 +31,6 @@ INCLUDE = -Iincludes/
 CFLAGS	= -Wall -Werror -Wextra -pipe ${INCLUDE} -g3 #-fsanitize=address
 
 all: ${NAME} 
-	@./woody_woodpacker resources/hello_world woody
 
 .obj/%.o: srcs/%.c
 	@${CC} ${CFLAGS} -c $< -o ${<:srcs/%.c=.obj/%.o}

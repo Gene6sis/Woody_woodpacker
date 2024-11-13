@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/12 15:04:00 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 11:19:45 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,7 +29,8 @@ unsigned int injected_code_len = 94;
 #define START_OFF	0x2f
 #define END_OFF		0x36
 
-// Function to check ELF and find a cave in the .text section
+#define PF_WOODY	0b1000
+
 Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Phdr *phdr = (Elf64_Phdr *)((char *)file_data + ehdr->e_phoff);
@@ -37,131 +38,142 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 
 	for (size_t i = 0; i < ehdr->e_phnum; i++) {
 		curr = &phdr[i];
-		if (curr->p_type == PT_LOAD && curr->p_flags == PF_X + PF_R) {
-			printf("Found the segment:\nStart: %lx\nSize: %lx\nEnd: %lx\n",
-					curr->p_offset, curr->p_filesz, curr->p_offset + curr->p_filesz + curr->p_align - (curr->p_filesz % curr->p_align)
-				);
+		if (curr->p_type == PT_LOAD && curr->p_flags & PF_X && curr->p_flags & PF_R) {
+			if (curr->p_flags & PF_WOODY) {
+				fprintf(stderr, "This file has already been injected by woody.\n");
+				return NULL;
+			}
 			*cave_offset = curr->p_offset + curr->p_filesz;
 			if (*cave_offset + injected_code_len >=
 				(curr->p_offset + curr->p_filesz + curr->p_align - (curr->p_filesz % curr->p_align))
 			)
 			{
+				fprintf(stderr, "This file does not have enough size in the code segment to be infected.\n");
 				return NULL;
 			}
-			curr->p_flags = PF_X + PF_R + PF_W;
+			curr->p_flags = PF_X + PF_R + PF_W + PF_WOODY; // On le "signe" pour pas re-infecter
 			return curr;
 		}
 	}
 	return NULL;
 }
 
-void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_offset, size_t key, size_t text_size) {
+void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_offset, unsigned int key, size_t text_size) {
 	const unsigned int	jump_to_decrypted	= original_entry - (cave_offset + injected_code_len);
 	const unsigned int	jump_to_start_text	= original_entry - (cave_offset + START_OFF + 4);
-	const unsigned int	jump_to_end_text	= original_entry + text_size - (cave_offset + END_OFF + 4);
+	const unsigned int	ptr_to_end_text		= original_entry + text_size - (cave_offset + END_OFF + 4);
 	const unsigned char	jump_4bytes_opcode	= 0xe9;
 
-	(void)key;
 	if (text_size == 0)
 		return;
 
-	printf("Changing last jump instruction from rip + 0x%x\n",
-		*(unsigned int *)(file_data + cave_offset + injected_code_len - 4));
-	printf("To 0x%x\n\n", jump_to_decrypted);
-
-	memcpy(file_data + cave_offset + injected_code_len - 4, &jump_to_decrypted, 4);
-	memcpy(file_data + cave_offset + injected_code_len - 5, &jump_4bytes_opcode, 1);
-
-	printf("Start offset: %08x\n", *(unsigned int *)(file_data + cave_offset + START_OFF));	
-	printf("End offset:   %08x\n", *(unsigned int *)(file_data + cave_offset + END_OFF));	
-	printf("Key offset:   %08x\n", *(unsigned int *)(file_data + cave_offset + KEY_OFF));	
-
-	memcpy(file_data + cave_offset + START_OFF, &jump_to_start_text, 4);
-	memcpy(file_data + cave_offset + END_OFF, &jump_to_end_text, 4);
-	memcpy(file_data + cave_offset + KEY_OFF, &key, 4);
-
-	printf("Start offset: %08x\n", *(unsigned int *)(file_data + cave_offset + START_OFF));	
-	printf("End offset:   %08x\n", *(unsigned int *)(file_data + cave_offset + END_OFF));	
-	printf("Key offset:   %08x\n", *(unsigned int *)(file_data + cave_offset + KEY_OFF));	
+	ft_memcpy(file_data + cave_offset + injected_code_len - 4, (char *)&jump_to_decrypted, 4);
+	ft_memcpy(file_data + cave_offset + injected_code_len - 5, (char *)&jump_4bytes_opcode, 1);
+	ft_memcpy(file_data + cave_offset + START_OFF, (char *)&jump_to_start_text, 4);
+	ft_memcpy(file_data + cave_offset + END_OFF, (char *)&ptr_to_end_text, 4);
+	ft_memcpy(file_data + cave_offset + KEY_OFF, (char *)&key, 4);
 }
 
-size_t	find_text_size(void *file_data) {
+void	find_text_size(void *file_data, size_t *start, size_t *size) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Shdr *shdr = (Elf64_Shdr *)((char *)file_data + ehdr->e_shoff);
 	char *strtab = (char *)file_data + shdr[ehdr->e_shstrndx].sh_offset;
 
 	for (int i = 0; i < ehdr->e_shnum; i++) {
-		if (strcmp(strtab + shdr[i].sh_name, ".text") == 0) {
-			return shdr[i].sh_size;
+		if (ft_strncmp(strtab + shdr[i].sh_name, ".text", 6) == 0) {
+			*start = shdr[i].sh_offset;
+			*size =  shdr[i].sh_size; 
+			return;
 		}
 	}
-	return 0;
+}
+
+void	encrypt(unsigned char *begin, size_t size, unsigned int key) {
+	unsigned int	encrypted;
+	unsigned char	*end = begin + size;
+
+	while (begin < end) {
+		encrypted = *((unsigned int *)begin);
+		encrypted = encrypted ^ key;
+		*((unsigned int *)begin) = encrypted;
+		begin += 4;
+	}
+}
+
+bool	valid_file(const unsigned char *file, const size_t file_size) {
+	if (file_size < sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) + 0x1000) {
+		return false;
+	}
+
+	if (((uint32_t *)file)[0] != 0x464c457f)
+		return false;
+
+	if (file[EI_CLASS] != ELFCLASS64 || file[EI_DATA] != ELFDATA2LSB)
+		return false;
+
+	if (((Elf64_Ehdr *)file)->e_machine != EM_X86_64)
+		return false;
+
+	return true;
 }
 
 // Function to inject code and modify entry point
 int inject_and_modify_entry(const char *input_file, const char *output_file) {
-	// Open original ELF file
-	int fd_in = open(input_file, O_RDONLY);
+	int			fd_in;
+	int			fd_out;
+	void		*file_data;
+	off_t		file_size;
+	size_t		text_begin;
+	size_t		text_size;
+	size_t		cave_offset;
+	Elf64_Ehdr	*ehdr;
+	Elf64_Addr	original_entry;
+	Elf64_Phdr	*load_segment;
+	uint32_t	key = 0x1122aabb;
+
+	fd_in = open(input_file, O_RDONLY);
 	if (fd_in == -1) {
 		perror("Failed to open input file");
 		return -1;
 	}
 
-	// Map the file into memory
-	off_t file_size = lseek(fd_in, 0, SEEK_END);
-	void *file_data = mmap(NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd_in, 0);
+	file_size = lseek(fd_in, 0, SEEK_END);
+	file_data = mmap(NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd_in, 0);
 	if (file_data == MAP_FAILED) {
 		perror("Failed to mmap file");
 		close(fd_in);
 		return -1;
 	}
 
-	// Get original entry point
-	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
-	Elf64_Addr original_entry = ehdr->e_entry;
-
-	// Locate the .text section and find cave offset
-	size_t cave_offset;
-	Elf64_Phdr *load_segment = find_text_section_cave(file_data, &cave_offset);
-	if (!load_segment) {
-		fprintf(stderr, "code semgent not found\n"); 
+	if (valid_file(file_data, file_size) == false) {
+		fprintf(stderr, "This is not a falid ELF file\n");
 		munmap(file_data, file_size);
 		close(fd_in);
 		return -1;
 	}
 
-	// Inject code into the cave
-	memcpy((char *)file_data + cave_offset, injected_code, injected_code_len);
+	ehdr = (Elf64_Ehdr *)file_data;
+	original_entry = ehdr->e_entry;
 
-	// Print original entry point
-	printf("Original entry point: 0x%lx\n", (unsigned long)original_entry);
+	load_segment = find_text_section_cave(file_data, &cave_offset);
+	cave_offset += 4;
+	if (!load_segment) {
+		fprintf(stderr, "Error finding the code semgent.\n");
+		munmap(file_data, file_size);
+		close(fd_in);
+		return -1;
+	}
 
-	// Print cave offset and address
-	printf("Cave offset: 0x%lx\n", (unsigned long)cave_offset);
+	find_text_size(file_data, &text_begin, &text_size);
 
-	// Print injected code details
-	printf("Injected code length: %u bytes\n", injected_code_len);
-	printf("Injected code starts at offset: 0x%lx\n", (unsigned long)cave_offset);
-
-
-	// printf("Old entry point address placeholder: 0x%lx\n", *(Elf64_Addr *)(file_data + cave_offset + 62));
-
-	// Replace placeholder with the actual original entry address
-	// *(Elf64_Addr *)(file_data + cave_offset + 62) = original_entry; // Offset 62 is where placeholder starts
-
-	change_asm_variables(file_data, original_entry, cave_offset, 0x42, find_text_size(file_data));
-
-	// printf("Original entry point address injected into the code: 0x%lx\n", *(Elf64_Addr *)(file_data + cave_offset + 62));
-
-	// Update the ELF header with the new entry point
+	encrypt(file_data + original_entry, text_size - (original_entry - text_begin), key);
+	
+	ft_memcpy((char *)(file_data + cave_offset), (char *)injected_code, injected_code_len);
+	
+	change_asm_variables(file_data, original_entry, cave_offset, key, text_size - (original_entry - text_begin));
 	ehdr->e_entry = cave_offset;
 
-	printf("New entry point set to: 0x%lx\n", (unsigned long)ehdr->e_entry);
-	print_memory((char *)(ehdr->e_entry + file_data), injected_code_len);
-	puts("\n");
-
-	// Write modified ELF data to a new file
-	int fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+	fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0755);
 	if (fd_out == -1) {
 		perror("Failed to open output file");
 		munmap(file_data, file_size);
@@ -177,9 +189,6 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 		return -1;
 	}
 
-	printf("New ELF file created with modified entry point at offset: 0x%lx\n", (unsigned long)ehdr->e_entry);
-
-	// Cleanup
 	munmap(file_data, file_size);
 	close(fd_in);
 	close(fd_out);
