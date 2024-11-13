@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/13 10:42:33 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 11:19:45 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -67,11 +67,11 @@ void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_of
 	if (text_size == 0)
 		return;
 
-	memcpy(file_data + cave_offset + injected_code_len - 4, &jump_to_decrypted, 4);
-	memcpy(file_data + cave_offset + injected_code_len - 5, &jump_4bytes_opcode, 1);
-	memcpy(file_data + cave_offset + START_OFF, &jump_to_start_text, 4);
-	memcpy(file_data + cave_offset + END_OFF, &ptr_to_end_text, 4);
-	memcpy(file_data + cave_offset + KEY_OFF, &key, 4);
+	ft_memcpy(file_data + cave_offset + injected_code_len - 4, (char *)&jump_to_decrypted, 4);
+	ft_memcpy(file_data + cave_offset + injected_code_len - 5, (char *)&jump_4bytes_opcode, 1);
+	ft_memcpy(file_data + cave_offset + START_OFF, (char *)&jump_to_start_text, 4);
+	ft_memcpy(file_data + cave_offset + END_OFF, (char *)&ptr_to_end_text, 4);
+	ft_memcpy(file_data + cave_offset + KEY_OFF, (char *)&key, 4);
 }
 
 void	find_text_size(void *file_data, size_t *start, size_t *size) {
@@ -80,7 +80,7 @@ void	find_text_size(void *file_data, size_t *start, size_t *size) {
 	char *strtab = (char *)file_data + shdr[ehdr->e_shstrndx].sh_offset;
 
 	for (int i = 0; i < ehdr->e_shnum; i++) {
-		if (strcmp(strtab + shdr[i].sh_name, ".text") == 0) {
+		if (ft_strncmp(strtab + shdr[i].sh_name, ".text", 6) == 0) {
 			*start = shdr[i].sh_offset;
 			*size =  shdr[i].sh_size; 
 			return;
@@ -98,6 +98,23 @@ void	encrypt(unsigned char *begin, size_t size, unsigned int key) {
 		*((unsigned int *)begin) = encrypted;
 		begin += 4;
 	}
+}
+
+bool	valid_file(const unsigned char *file, const size_t file_size) {
+	if (file_size < sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) + 0x1000) {
+		return false;
+	}
+
+	if (((uint32_t *)file)[0] != 0x464c457f)
+		return false;
+
+	if (file[EI_CLASS] != ELFCLASS64 || file[EI_DATA] != ELFDATA2LSB)
+		return false;
+
+	if (((Elf64_Ehdr *)file)->e_machine != EM_X86_64)
+		return false;
+
+	return true;
 }
 
 // Function to inject code and modify entry point
@@ -124,6 +141,13 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	file_data = mmap(NULL, file_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd_in, 0);
 	if (file_data == MAP_FAILED) {
 		perror("Failed to mmap file");
+		close(fd_in);
+		return -1;
+	}
+
+	if (valid_file(file_data, file_size) == false) {
+		fprintf(stderr, "This is not a falid ELF file\n");
+		munmap(file_data, file_size);
 		close(fd_in);
 		return -1;
 	}

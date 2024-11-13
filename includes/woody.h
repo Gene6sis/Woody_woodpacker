@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:06:57 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/13 10:37:58 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 11:13:25 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,10 +19,11 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <elf.h>
-#include <string.h>
+#include <stdbool.h>
 
 //	Utils
 void	ft_memcpy(char *dst, char *src, size_t len);
+int		ft_strncmp(const char *s1, const char *s2, size_t n);
 
 //	Inject
 int		inject_and_modify_entry(const char *input_file, const char *output_file);
