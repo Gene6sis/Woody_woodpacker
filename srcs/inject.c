@@ -24,6 +24,7 @@ unsigned char injected_code[] = {
 	0x5f, 0x5a, 0x59, 0x5b, 0x58, 0xeb, 0xa5, 0xff, 0xff, 0xff
 };
 unsigned int injected_code_len = 94;
+size_t file_start;
 
 #define KEY_OFF		0x3e
 #define START_OFF	0x2f
@@ -64,6 +65,11 @@ void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_of
 	const unsigned int	ptr_to_end_text		= original_entry + text_size - (cave_offset + END_OFF + 4);
 	const unsigned char	jump_4bytes_opcode	= 0xe9;
 
+	printf("jump_to_decrypted: %d\n", jump_to_decrypted);
+	printf("jump_to_start_text: %d\n", jump_to_start_text);
+	printf("ptr_to_end_text: %d\n", ptr_to_end_text);
+	printf("jump_4bytes_opcode: %d\n", jump_4bytes_opcode);
+
 	if (text_size == 0)
 		return;
 
@@ -74,7 +80,7 @@ void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_of
 	ft_memcpy(file_data + cave_offset + KEY_OFF, (char *)&key, 4);
 }
 
-void	find_text_size(void *file_data, size_t *start, size_t *size) {
+void	find_text_size(void *file_data, size_t *start, size_t *size, size_t *text_offset) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Shdr *shdr = (Elf64_Shdr *)((char *)file_data + ehdr->e_shoff);
 	char *strtab = (char *)file_data + shdr[ehdr->e_shstrndx].sh_offset;
@@ -83,15 +89,21 @@ void	find_text_size(void *file_data, size_t *start, size_t *size) {
 		if (ft_strncmp(strtab + shdr[i].sh_name, ".text", 6) == 0) {
 			*start = shdr[i].sh_offset;
 			*size =  shdr[i].sh_size; 
+			*text_offset = shdr[i].sh_offset;
 			return;
 		}
 	}
 }
 
-void	encrypt(unsigned char *begin, size_t size, unsigned int key) {
+void	encrypt(unsigned int *begin, size_t size, unsigned int key) {
 	unsigned int	encrypted;
-	unsigned char	*end = begin + size;
+	unsigned int	*end = begin + size;
 
+	printf("Encrypting\n");
+	printf("Size: %zu\n", size);
+	printf("Key: %d\n", key);
+	printf("Begin: %p\n", begin - file_start);
+	printf("End: %p\n", end - file_start);
 	while (begin < end) {
 		encrypted = *((unsigned int *)begin);
 		encrypted = encrypted ^ key;
@@ -125,6 +137,7 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	off_t		file_size;
 	size_t		text_begin;
 	size_t		text_size;
+	size_t		text_offset;
 	size_t		cave_offset;
 	Elf64_Ehdr	*ehdr;
 	Elf64_Addr	original_entry;
@@ -144,6 +157,7 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 		close(fd_in);
 		return -1;
 	}
+	file_start = (size_t)file_data;
 
 	if (valid_file(file_data, file_size) == false) {
 		fprintf(stderr, "This is not a falid ELF file\n");
@@ -164,14 +178,22 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 		return -1;
 	}
 
-	find_text_size(file_data, &text_begin, &text_size);
+	find_text_size(file_data, &text_begin, &text_size, &text_offset);
 
-	encrypt(file_data + original_entry, text_size - (original_entry - text_begin), key);
+	// Explain the calculation of size : text_size - (original_entry - text_begin)
+	// printf("Text size: %zu\n", text_size);
+	// printf("Original entry: %ld\n", original_entry);
+	// printf("Text begin: %zu\n", text_begin);
+	// printf("Original entry - Text begin: %zu\n", original_entry - text_begin);
+	// printf("Text size - (Original entry - Text begin): %zu\n", text_size - (original_entry - text_begin));
+	encrypt(file_data + original_entry, text_size, key);
 	
 	ft_memcpy((char *)(file_data + cave_offset), (char *)injected_code, injected_code_len);
 	
-	change_asm_variables(file_data, original_entry, cave_offset, key, text_size - (original_entry - text_begin));
-	ehdr->e_entry = cave_offset;
+	change_asm_variables(file_data, original_entry, cave_offset, key, text_size);
+	ehdr->e_entry = cave_offset + (original_entry - text_offset);
+	// printf("Original entry point: %ld\n", original_entry);
+	// printf("New entry point: %ld\n", ehdr->e_entry);
 
 	fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0755);
 	if (fd_out == -1) {
