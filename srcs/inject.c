@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/13 10:05:21 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 10:27:38 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,6 +29,8 @@ unsigned int injected_code_len = 94;
 #define START_OFF	0x2f
 #define END_OFF		0x36
 
+#define PF_WOODY	0b1000
+
 Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Phdr *phdr = (Elf64_Phdr *)((char *)file_data + ehdr->e_phoff);
@@ -36,7 +38,11 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 
 	for (size_t i = 0; i < ehdr->e_phnum; i++) {
 		curr = &phdr[i];
-		if (curr->p_type == PT_LOAD && curr->p_flags == PF_X + PF_R) {
+		if (curr->p_type == PT_LOAD && curr->p_flags & PF_X && curr->p_flags & PF_R) {
+			if (curr->p_flags & PF_WOODY) {
+				fprintf(stderr, "This file has already been injected by woody.\n");
+				return NULL;
+			}
 			*cave_offset = curr->p_offset + curr->p_filesz;
 			if (*cave_offset + injected_code_len >=
 				(curr->p_offset + curr->p_filesz + curr->p_align - (curr->p_filesz % curr->p_align))
@@ -44,7 +50,7 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 			{
 				return NULL;
 			}
-			curr->p_flags = PF_X + PF_R + PF_W;
+			curr->p_flags = PF_X + PF_R + PF_W + PF_WOODY; // On le "signe" pour pas re-infecter
 			return curr;
 		}
 	}
@@ -163,7 +169,7 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	load_segment = find_text_section_cave(file_data, &cave_offset);
 	cave_offset += 4;
 	if (!load_segment) {
-		fprintf(stderr, "code semgent not found\n"); 
+		fprintf(stderr, "Code semgent not found.\n");
 		munmap(file_data, file_size);
 		close(fd_in);
 		return -1;
