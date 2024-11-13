@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:06:57 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/12 14:46:55 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 10:37:58 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@
 #include <string.h>
 
 //	Utils
-void	print_memory(char *data, size_t len);
+void	ft_memcpy(char *dst, char *src, size_t len);
 
 //	Inject
 int		inject_and_modify_entry(const char *input_file, const char *output_file);

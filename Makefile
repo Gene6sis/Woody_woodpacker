@@ -6,7 +6,7 @@
 #    By: nguiard <marvin@42.fr>                     +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/10/25 15:46:23 by nguiard           #+#    #+#              #
-#    Updated: 2024/11/12 17:29:38 by nguiard          ###   ########.fr        #
+#    Updated: 2024/11/13 10:31:00 by nguiard          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -30,7 +30,6 @@ INCLUDE = -Iincludes/
 CFLAGS	= -Wall -Werror -Wextra -pipe ${INCLUDE} -g3 #-fsanitize=address
 
 all: ${NAME} 
-	@./woody_woodpacker resources/hello_world out.test 
 
 .obj/%.o: srcs/%.c
 	@${CC} ${CFLAGS} -c $< -o ${<:srcs/%.c=.obj/%.o}
