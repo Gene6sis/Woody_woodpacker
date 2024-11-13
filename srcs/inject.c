@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/12 17:47:35 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/13 10:05:21 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,7 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_offset, unsigned int key, size_t text_size) {
 	const unsigned int	jump_to_decrypted	= original_entry - (cave_offset + injected_code_len);
 	const unsigned int	jump_to_start_text	= original_entry - (cave_offset + START_OFF + 4);
-	const unsigned int	jump_to_end_text	= original_entry + text_size - (cave_offset + END_OFF + 4);
+	const unsigned int	ptr_to_end_text		= original_entry + text_size - (cave_offset + END_OFF + 4);
 	const unsigned char	jump_4bytes_opcode	= 0xe9;
 
 	if (text_size == 0)
@@ -72,7 +72,7 @@ void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_of
 	printf("Key offset:   %08x\n", *(unsigned int *)(file_data + cave_offset + KEY_OFF));	
 
 	memcpy(file_data + cave_offset + START_OFF, &jump_to_start_text, 4);
-	memcpy(file_data + cave_offset + END_OFF, &jump_to_end_text, 4);
+	memcpy(file_data + cave_offset + END_OFF, &ptr_to_end_text, 4);
 	memcpy(file_data + cave_offset + KEY_OFF, &key, 4);
 
 	printf("Start offset: %08x\n", *(unsigned int *)(file_data + cave_offset + START_OFF));	
@@ -148,6 +148,18 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	ehdr = (Elf64_Ehdr *)file_data;
 	original_entry = ehdr->e_entry;
 
+	Elf64_Phdr	*curr_p;
+	Elf64_Phdr	*phdr = (Elf64_Phdr *)(ehdr->e_phoff + file_data);
+
+	for (int i = 0; i < ehdr->e_phnum; i++) {
+		curr_p = &phdr[i];
+		if (curr_p->p_type == PT_LOAD && curr_p->p_flags == PF_X + PF_R) {
+			printf("SEGMENT PT_LOAD FOR CODE:\n");
+			printf("Start: %lx\n", curr_p->p_offset);
+			printf("End:   %lx\n", curr_p->p_offset + curr_p->p_filesz);
+		}
+	}
+
 	load_segment = find_text_section_cave(file_data, &cave_offset);
 	cave_offset += 4;
 	if (!load_segment) {
@@ -164,11 +176,11 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	print_memory(file_data + cave_offset, injected_code_len);
 	printf("\033[0m\n");
 	
-	encrypt(file_data + original_entry, text_size, key);
+	encrypt(file_data + original_entry, text_size - (original_entry - text_begin), key);
 	
 	memcpy((char *)(file_data + cave_offset), injected_code, injected_code_len);
 	
-	change_asm_variables(file_data, original_entry, cave_offset, key, text_size);
+	change_asm_variables(file_data, original_entry, cave_offset, key, text_size - (original_entry - text_begin));
 	ehdr->e_entry = cave_offset;
 
 	printf("Original entry point: 0x%lx\n", (unsigned long)original_entry);
