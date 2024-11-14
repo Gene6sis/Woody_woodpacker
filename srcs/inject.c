@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/14 10:42:05 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/14 11:47:06 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,8 +43,8 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset_file, si
 				fprintf(stderr, "This file has already been injected by woody.\n");
 				return NULL;
 			}
-			*cave_offset_file = curr->p_offset + curr->p_filesz;
-			*cave_offset_virtual = curr->p_vaddr + curr->p_filesz;
+			*cave_offset_file = curr->p_offset + curr->p_filesz + 4;
+			*cave_offset_virtual = curr->p_vaddr + curr->p_filesz + 4;
 			if (*cave_offset_file + injected_code_len >=
 				(curr->p_offset + curr->p_filesz + curr->p_align - (curr->p_filesz % curr->p_align))
 			)
@@ -126,7 +126,7 @@ bool	valid_file(const unsigned char *file, const size_t file_size) {
 }
 
 // Function to inject code and modify entry point
-int inject_and_modify_entry(const char *input_file, const char *output_file) {
+int inject_and_modify_entry(const char *input_file, const char *output_file, const unsigned int key) {
 	int			fd_in;
 	int			fd_out;
 	void		*file_data;
@@ -140,7 +140,6 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	Elf64_Addr	original_entry_file;
 	Elf64_Addr	original_entry_virtual;
 	Elf64_Phdr	*load_segment;
-	uint32_t	key = 0x1122aabb;
 
 	fd_in = open(input_file, O_RDONLY);
 	if (fd_in == -1) {
@@ -178,19 +177,18 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	original_entry_virtual = ehdr->e_entry;
 	original_entry_file = text_begin_file + (original_entry_virtual - text_begin_virtual);
 
-	printf("File:\n");
-	printf("OG Entry:     %lx\n", original_entry_file);
-	printf("Text begin:   %lx\n", text_begin_file);
-	printf("Text end:     %lx\n", text_begin_file + text_size);
-	printf("Cave offset:  %lx\n", cave_offset_file);
-	printf("Injected end: %lx\n\n", cave_offset_file + injected_code_len);
-	printf("Memory:\n");
-	printf("OG Entry:     %lx\n", original_entry_virtual);
-	printf("Text begin:   %lx\n", text_begin_virtual);
-	printf("Text end:     %lx\n", text_begin_virtual + text_size);
-	printf("Cave offset:  %lx\n", cave_offset_virtual);
-	printf("Injected end: %lx\n", cave_offset_virtual + injected_code_len);
-
+	// printf("File:\n");
+	// printf("OG Entry:     %lx\n", original_entry_file);
+	// printf("Text begin:   %lx\n", text_begin_file);
+	// printf("Text end:     %lx\n", text_begin_file + text_size);
+	// printf("Cave offset:  %lx\n", cave_offset_file);
+	// printf("Injected end: %lx\n\n", cave_offset_file + injected_code_len);
+	// printf("Memory:\n");
+	// printf("OG Entry:     %lx\n", original_entry_virtual);
+	// printf("Text begin:   %lx\n", text_begin_virtual);
+	// printf("Text end:     %lx\n", text_begin_virtual + text_size);
+	// printf("Cave offset:  %lx\n", cave_offset_virtual);
+	// printf("Injected end: %lx\n", cave_offset_virtual + injected_code_len);
 
 	encrypt(file_data + original_entry_file, text_size - (original_entry_file - text_begin_file), key);
 
@@ -199,11 +197,11 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	change_asm_variables(file_data, original_entry_virtual, cave_offset_file, cave_offset_virtual, key,
 					  text_size - (original_entry_virtual - text_begin_virtual));
 
-	printf("Old entry: %lx\n", ehdr->e_entry);
+	// printf("Old entry: %lx\n", ehdr->e_entry);
 
 	ehdr->e_entry += (cave_offset_virtual - original_entry_virtual);
 
-	printf("New entry: %lx (%lx)\n", ehdr->e_entry, (cave_offset_virtual - original_entry_virtual));
+	// printf("New entry: %lx (%lx)\n", ehdr->e_entry, (cave_offset_virtual - original_entry_virtual));
 
 	fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0755);
 	if (fd_out == -1) {
