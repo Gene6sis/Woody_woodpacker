@@ -6,7 +6,7 @@
 #    By: nguiard <marvin@42.fr>                     +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/10/25 15:46:23 by nguiard           #+#    #+#              #
-#    Updated: 2024/11/14 12:29:27 by nguiard          ###   ########.fr        #
+#    Updated: 2024/11/14 13:11:19 by nguiard          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -51,7 +51,8 @@ clean:
 
 fclean:
 	@rm -rf ${OBJ} ${NAME}
-	@rm -rf *.woody
+	@rm -rf normal.woody nopie.woody asm.woody
+	@make fclean -C resources
 
 
 test:
