@@ -6,7 +6,7 @@
 #    By: nguiard <marvin@42.fr>                     +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/10/25 15:46:23 by nguiard           #+#    #+#              #
-#    Updated: 2024/11/13 10:31:00 by nguiard          ###   ########.fr        #
+#    Updated: 2024/11/14 12:29:27 by nguiard          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -51,9 +51,23 @@ clean:
 
 fclean:
 	@rm -rf ${OBJ} ${NAME}
+	@rm -rf *.woody
+
+
+test:
+	@make -C resources
+	@echo -e "\n\033[32mTests:\n\033[0m"
+	@echo -e "\033[1mNormal\033[0m executable\n"
+	@./${NAME} resources/normal normal.woody
+	@echo -e "\n\033[1m32bits\033[0m executable\n"
+	@./${NAME} resources/32bits 32bits.woody
+	@echo -e "\n\033[1mno-pie\033[0m executable\n"
+	@./${NAME} resources/nopie  nopie.woody
+	@echo -e "\n\033[1mAssembly\033[0m executable\n"
+	@./${NAME} resources/asm    asm.woody
 
 
 re: fclean all
 
 
-.PHONY: all clean fclean re debug
+.PHONY: all clean fclean re test
