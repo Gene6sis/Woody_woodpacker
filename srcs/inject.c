@@ -6,7 +6,7 @@
 /*   By: nguiard <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/11/12 14:25:32 by nguiard           #+#    #+#             */
-/*   Updated: 2024/11/13 11:19:45 by nguiard          ###   ########.fr       */
+/*   Updated: 2024/11/14 11:47:06 by nguiard          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,7 +31,7 @@ unsigned int injected_code_len = 94;
 
 #define PF_WOODY	0b1000
 
-Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
+Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset_file, size_t *cave_offset_virtual) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Phdr *phdr = (Elf64_Phdr *)((char *)file_data + ehdr->e_phoff);
 	Elf64_Phdr *curr = NULL;
@@ -43,8 +43,9 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 				fprintf(stderr, "This file has already been injected by woody.\n");
 				return NULL;
 			}
-			*cave_offset = curr->p_offset + curr->p_filesz;
-			if (*cave_offset + injected_code_len >=
+			*cave_offset_file = curr->p_offset + curr->p_filesz + 4;
+			*cave_offset_virtual = curr->p_vaddr + curr->p_filesz + 4;
+			if (*cave_offset_file + injected_code_len >=
 				(curr->p_offset + curr->p_filesz + curr->p_align - (curr->p_filesz % curr->p_align))
 			)
 			{
@@ -58,31 +59,38 @@ Elf64_Phdr* find_text_section_cave(void *file_data, size_t *cave_offset) {
 	return NULL;
 }
 
-void	change_asm_variables(void *file_data, size_t original_entry, size_t cave_offset, unsigned int key, size_t text_size) {
-	const unsigned int	jump_to_decrypted	= original_entry - (cave_offset + injected_code_len);
-	const unsigned int	jump_to_start_text	= original_entry - (cave_offset + START_OFF + 4);
-	const unsigned int	ptr_to_end_text		= original_entry + text_size - (cave_offset + END_OFF + 4);
+void	change_asm_variables(void *file_data,
+							size_t original_entry_virtual,
+							size_t cave_offset_file,
+							size_t cave_offset_virtual,
+							unsigned int key,
+							size_t text_size)
+{
+	const unsigned int	jump_to_decrypted	= original_entry_virtual - (cave_offset_virtual + injected_code_len);
+	const unsigned int	jump_to_start_text	= original_entry_virtual - (cave_offset_virtual + START_OFF + 4);
+	const unsigned int	ptr_to_end_text		= original_entry_virtual + text_size - (cave_offset_virtual + END_OFF + 4);
 	const unsigned char	jump_4bytes_opcode	= 0xe9;
 
 	if (text_size == 0)
 		return;
 
-	ft_memcpy(file_data + cave_offset + injected_code_len - 4, (char *)&jump_to_decrypted, 4);
-	ft_memcpy(file_data + cave_offset + injected_code_len - 5, (char *)&jump_4bytes_opcode, 1);
-	ft_memcpy(file_data + cave_offset + START_OFF, (char *)&jump_to_start_text, 4);
-	ft_memcpy(file_data + cave_offset + END_OFF, (char *)&ptr_to_end_text, 4);
-	ft_memcpy(file_data + cave_offset + KEY_OFF, (char *)&key, 4);
+	ft_memcpy(file_data + cave_offset_file + injected_code_len - 4, (char *)&jump_to_decrypted, 4);
+	ft_memcpy(file_data + cave_offset_file + injected_code_len - 5, (char *)&jump_4bytes_opcode, 1);
+	ft_memcpy(file_data + cave_offset_file + START_OFF, (char *)&jump_to_start_text, 4);
+	ft_memcpy(file_data + cave_offset_file + END_OFF, (char *)&ptr_to_end_text, 4);
+	ft_memcpy(file_data + cave_offset_file + KEY_OFF, (char *)&key, 4);
 }
 
-void	find_text_size(void *file_data, size_t *start, size_t *size) {
+void	find_text_size(void *file_data, size_t *start_file, size_t *start_virtual, size_t *size) {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)file_data;
 	Elf64_Shdr *shdr = (Elf64_Shdr *)((char *)file_data + ehdr->e_shoff);
 	char *strtab = (char *)file_data + shdr[ehdr->e_shstrndx].sh_offset;
 
 	for (int i = 0; i < ehdr->e_shnum; i++) {
 		if (ft_strncmp(strtab + shdr[i].sh_name, ".text", 6) == 0) {
-			*start = shdr[i].sh_offset;
-			*size =  shdr[i].sh_size; 
+			*start_file		= shdr[i].sh_offset;
+			*start_virtual	= shdr[i].sh_addr;
+			*size			= shdr[i].sh_size; 
 			return;
 		}
 	}
@@ -118,18 +126,20 @@ bool	valid_file(const unsigned char *file, const size_t file_size) {
 }
 
 // Function to inject code and modify entry point
-int inject_and_modify_entry(const char *input_file, const char *output_file) {
+int inject_and_modify_entry(const char *input_file, const char *output_file, const unsigned int key) {
 	int			fd_in;
 	int			fd_out;
 	void		*file_data;
 	off_t		file_size;
-	size_t		text_begin;
+	size_t		text_begin_file;
+	size_t		text_begin_virtual;
 	size_t		text_size;
-	size_t		cave_offset;
+	size_t		cave_offset_file;
+	size_t		cave_offset_virtual;
 	Elf64_Ehdr	*ehdr;
-	Elf64_Addr	original_entry;
+	Elf64_Addr	original_entry_file;
+	Elf64_Addr	original_entry_virtual;
 	Elf64_Phdr	*load_segment;
-	uint32_t	key = 0x1122aabb;
 
 	fd_in = open(input_file, O_RDONLY);
 	if (fd_in == -1) {
@@ -153,10 +163,8 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 	}
 
 	ehdr = (Elf64_Ehdr *)file_data;
-	original_entry = ehdr->e_entry;
 
-	load_segment = find_text_section_cave(file_data, &cave_offset);
-	cave_offset += 4;
+	load_segment = find_text_section_cave(file_data, &cave_offset_file, &cave_offset_virtual);
 	if (!load_segment) {
 		fprintf(stderr, "Error finding the code semgent.\n");
 		munmap(file_data, file_size);
@@ -164,14 +172,36 @@ int inject_and_modify_entry(const char *input_file, const char *output_file) {
 		return -1;
 	}
 
-	find_text_size(file_data, &text_begin, &text_size);
+	find_text_size(file_data, &text_begin_file, &text_begin_virtual, &text_size);
 
-	encrypt(file_data + original_entry, text_size - (original_entry - text_begin), key);
-	
-	ft_memcpy((char *)(file_data + cave_offset), (char *)injected_code, injected_code_len);
-	
-	change_asm_variables(file_data, original_entry, cave_offset, key, text_size - (original_entry - text_begin));
-	ehdr->e_entry = cave_offset;
+	original_entry_virtual = ehdr->e_entry;
+	original_entry_file = text_begin_file + (original_entry_virtual - text_begin_virtual);
+
+	// printf("File:\n");
+	// printf("OG Entry:     %lx\n", original_entry_file);
+	// printf("Text begin:   %lx\n", text_begin_file);
+	// printf("Text end:     %lx\n", text_begin_file + text_size);
+	// printf("Cave offset:  %lx\n", cave_offset_file);
+	// printf("Injected end: %lx\n\n", cave_offset_file + injected_code_len);
+	// printf("Memory:\n");
+	// printf("OG Entry:     %lx\n", original_entry_virtual);
+	// printf("Text begin:   %lx\n", text_begin_virtual);
+	// printf("Text end:     %lx\n", text_begin_virtual + text_size);
+	// printf("Cave offset:  %lx\n", cave_offset_virtual);
+	// printf("Injected end: %lx\n", cave_offset_virtual + injected_code_len);
+
+	encrypt(file_data + original_entry_file, text_size - (original_entry_file - text_begin_file), key);
+
+	ft_memcpy((char *)(file_data + cave_offset_file), (char *)injected_code, injected_code_len);
+
+	change_asm_variables(file_data, original_entry_virtual, cave_offset_file, cave_offset_virtual, key,
+					  text_size - (original_entry_virtual - text_begin_virtual));
+
+	// printf("Old entry: %lx\n", ehdr->e_entry);
+
+	ehdr->e_entry += (cave_offset_virtual - original_entry_virtual);
+
+	// printf("New entry: %lx (%lx)\n", ehdr->e_entry, (cave_offset_virtual - original_entry_virtual));
 
 	fd_out = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0755);
 	if (fd_out == -1) {

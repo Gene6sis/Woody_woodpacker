@@ -2,5 +2,11 @@ Makefiletest
 woody
 woody_woodpacker
 
+resources/normal
+resources/nopie
+resources/32bits
+resources/asm
+
 *.test
 *.o
+*.woody
